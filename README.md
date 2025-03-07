@@ -24,3 +24,5 @@ conda activate FLY2PY
 Now you can use fly2py!
 
 The fly2py_demo directory contains an example script, ftjp_demo.py, that demonstrates the use of many of functions of fly2py
+
+Further documentation coming soon!
