@@ -1,5 +1,4 @@
- <!---![fly2py](logo/fly2py.png)--->
-<img src="logo/fly2py.png" alt="fly2py" width="300" height="300" style="display: block; margin: 0 auto;">
+![fly2py](logo/fly2py.png)
 
 
 _____________________________
