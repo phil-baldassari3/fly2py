@@ -1,5 +1,4 @@
-# fly2py
-Python module for working with Flytracker and JAABA output data
+![fly2py](logo/fly2py.png)
 
 _____________________________
 
