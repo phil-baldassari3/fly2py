@@ -953,64 +953,115 @@ class experiment():
 
         
 
-    def ethogram(self, fly, scorethreshold=0.75, burnin=0, framerate=30, plottitle="", showplot=False, saveplot=True, filename=""):
+
+    def ethogram(self, fly, scorethreshold=0.75, burnin=0, framerate=30, behavior_order=None, plottitle="", showplot=False, saveplot=True, filename=""):
         """
-        Method to plot an ethogram of all loaded behaviors for a single fly. Select the fly to plot by its itenger id value.
+        Method to plot an ethogram of all loaded behaviors for a single fly or a layered ethogram for a set of flies. Select the fly to plot by its itenger id value.
         The burnin can be set to the SECOND to start the plot at. Note that this is different from the struct2df method which takes the frame to start at.
         The average behavior score threshold can also be set, but defaults to 0.75.
         """
 
-        #setting up plot
-        plt.figure(figsize=(20,5))
+        #selecting flies
+        flyls = []
+        singlefly = False
+
+        if fly == 'all':
+            for idx in range(len(self.trx_ls)):
+                flyls.append(idx+1)
+        
+        elif isinstance(fly, list):
+            flyls = fly
+        
+        elif fly == 'm':
+            for i in self.sex.keys():
+                if self.sex[i] == 'm':
+                    flyls.append(i)
+            flyls.sort()
+        
+        elif fly == 'f':
+            for i in self.sex.keys():
+                if self.sex[i] == 'f':
+                    flyls.append(i)
+            flyls.sort()
+        
+        else:
+            flyls.append(fly)
+            singlefly = True
+            
+        
+        if singlefly:
+            plt.figure(figsize=(20,5))
+        else:
+            plt.figure(figsize=(15,10))
+
 
         #getting behaviors
-        behaviors = list(self.jaaba_processed.keys())
+        if behavior_order:
+            behaviors = behavior_order
+        else:
+            behaviors = list(self.jaaba_processed.keys())
 
         #creating color map
         colors = plt.cm.hsv(np.linspace(0, 0.8, len(behaviors)))
 
-        #looping through behaviors
-        for behavior_idx, behavior in enumerate(behaviors):
 
-            #averaging dataframe per second
-            framesdf = self.jaaba_processed[behavior]
-            persec = framesdf.groupby(np.arange(len(framesdf))//framerate).mean()
 
-            #extracting behavior data for selected fly
-            fly_behavior_data = persec[fly].to_list()
+        #looping through flies and behaviors
+        for f in flyls:
+            for behavior_idx, behavior in enumerate(behaviors):
 
-            #finding behavior ranges
-            starts = []
-            stops = []
-            behaving = False
+                #averaging dataframe per second
+                framesdf = self.jaaba_processed[behavior]
+                persec = framesdf.groupby(np.arange(len(framesdf))//framerate).mean()
 
-            for second_idx, score in enumerate(fly_behavior_data):
+                #extracting behavior data for selected fly
+                fly_behavior_data = persec[f].to_list()
 
-                if behaving:
-                    if score >= scorethreshold:
-                        continue
+                #finding behavior ranges
+                starts = []
+                stops = []
+                behaving = False
+
+                for second_idx, score in enumerate(fly_behavior_data):
+
+                    if behaving:
+                        if score >= scorethreshold:
+                            continue
+                        else:
+                            stops.append(second_idx+1)
+                            behaving = False
                     else:
-                        stops.append(second_idx+1)
-                        behaving = False
+                        if score >= scorethreshold:
+                            starts.append(second_idx+1)
+                            behaving = True
+                        else:
+                            continue
+
+                #if starts and stops are not the same length, that means the final range reaches the end
+                if len(starts) != len(stops):
+                    stops.append(len(fly_behavior_data))
+
+
+                if singlefly:
+                    behavior_labels = [behavior] * len(starts)
+                    plt.hlines(y=behavior_labels, xmin=starts, xmax=stops, linewidth=15, color=colors[behavior_idx])
                 else:
-                    if score >= scorethreshold:
-                        starts.append(second_idx+1)
-                        behaving = True
-                    else:
-                        continue
+                    #fly_labels = [f] * len(starts)
+                    fly_labels = ["fly" + str(f) for i in range(len(starts))]
+                    plt.hlines(y=fly_labels, xmin=starts, xmax=stops, linewidth=5, label=behavior, color=colors[behavior_idx])
+        
 
-            #if starts and stops are not the same length, that means the final range reaches the end
-            if len(starts) != len(stops):
-                stops.append(len(fly_behavior_data))
-
-            #plotting behavior ranges
-            behavior_labels = [behavior] * len(starts)
-            plt.hlines(y=behavior_labels, xmin=starts, xmax=stops, linewidth=15, color=colors[behavior_idx])
 
         #formating plot
         plt.xlim(left=burnin)
         plt.xlabel("seconds")
         plt.title(plottitle)
+        
+        #legend removing duplicates
+        if not singlefly:
+            handles, labels = plt.gca().get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+            plt.legend(by_label.values(), by_label.keys(), loc='center left', bbox_to_anchor=(1, 0.5), prop={'size': 6})
 
         if showplot:
             plt.show()
@@ -1018,8 +1069,6 @@ class experiment():
         if saveplot:
             plt.savefig('{name}_ethogram_{flies}.png'.format(name=filename, flies=str(fly)))
 
-
-        
 
 
 
@@ -1296,3 +1345,74 @@ class experiment():
 
 
 
+
+    def single_ethogram(self, fly, scorethreshold=0.75, burnin=0, framerate=30, plottitle="", showplot=False, saveplot=True, filename=""):
+        """
+        Method to plot an ethogram of all loaded behaviors for a single fly. Select the fly to plot by its itenger id value.
+        The burnin can be set to the SECOND to start the plot at. Note that this is different from the struct2df method which takes the frame to start at.
+        The average behavior score threshold can also be set, but defaults to 0.75.
+        """
+
+        #setting up plot
+        plt.figure(figsize=(20,5))
+
+        #getting behaviors
+        behaviors = list(self.jaaba_processed.keys())
+
+        #creating color map
+        colors = plt.cm.hsv(np.linspace(0, 0.8, len(behaviors)))
+
+        #looping through behaviors
+        for behavior_idx, behavior in enumerate(behaviors):
+
+            #averaging dataframe per second
+            framesdf = self.jaaba_processed[behavior]
+            persec = framesdf.groupby(np.arange(len(framesdf))//framerate).mean()
+
+            #extracting behavior data for selected fly
+            fly_behavior_data = persec[fly].to_list()
+
+            #finding behavior ranges
+            starts = []
+            stops = []
+            behaving = False
+
+            for second_idx, score in enumerate(fly_behavior_data):
+
+                if behaving:
+                    if score >= scorethreshold:
+                        continue
+                    else:
+                        stops.append(second_idx+1)
+                        behaving = False
+                else:
+                    if score >= scorethreshold:
+                        starts.append(second_idx+1)
+                        behaving = True
+                    else:
+                        continue
+
+            #if starts and stops are not the same length, that means the final range reaches the end
+            if len(starts) != len(stops):
+                stops.append(len(fly_behavior_data))
+
+            #plotting behavior ranges
+            behavior_labels = [behavior] * len(starts)
+            plt.hlines(y=behavior_labels, xmin=starts, xmax=stops, linewidth=15, color=colors[behavior_idx])
+
+        #formating plot
+        plt.xlim(left=burnin)
+        plt.xlabel("seconds")
+        plt.title(plottitle)
+
+        if showplot:
+            plt.show()
+
+        if saveplot:
+            plt.savefig('{name}_ethogram_{flies}.png'.format(name=filename, flies=str(fly)))
+
+
+
+
+
+    
