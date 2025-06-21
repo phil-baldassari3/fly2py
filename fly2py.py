@@ -21,6 +21,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import itertools
+from collections import Counter
+from prettytable import PrettyTable
 #networkx can cause some problems, to avoid these networkx is optional for this program to run
 try:
     import networkx as nx
@@ -38,7 +40,7 @@ except AttributeError as e:
 
 
 #class for extracting matlab structure type data
-class struct2df():
+class Struct2PyData():
 
     def __init__(self, matfile, separate_chambers=None):
         """
@@ -65,14 +67,14 @@ class struct2df():
             self.mat_dict = mat73.loadmat(matfile)
 
             #transposing the dictionary of lists to list of dictionaries
-            temp_ls_of_dicts = struct2df._dict2list_of_dicts(self.mat_dict['trx'])
+            temp_ls_of_dicts = Struct2PyData._dict2list_of_dicts(self.mat_dict['trx'])
 
             #cleaning scalar arrays by direct assignment
-            self.mat_dict['trx'] = struct2df._listofdicts_clean_scalar_arrays(temp_ls_of_dicts)
+            self.mat_dict['trx'] = Struct2PyData._listofdicts_clean_scalar_arrays(temp_ls_of_dicts)
 
 
 
-        #struct2df objects
+        #Struct2PyData objects
         self.trx_ls = []
         self.chambers = separate_chambers
         self.param_df = pd.DataFrame()
@@ -204,7 +206,7 @@ class struct2df():
     @staticmethod
     def _dict2list_of_dicts(input_dict):
         """
-        Private function used in the class `struct2df` to transpose a dictionary of lists to a list of dictionaries.
+        Private function used in the class `Struct2PyData` to transpose a dictionary of lists to a list of dictionaries.
         This is for converting the data in mat 7.3 files which are opened with the module mat73. This modules returns a dictioary where each key represents a column.
         However, this module expects a sepearte dictioary for each row, hence the need for transposition. The module converts dictioaries as follows:
         e.g. {'a': [1, 2, 3], 'b': [4, 5, 6]} --> [{'a': 1, 'b': 4}, {'a': 2, 'b': 5}, {'a': 3, 'b': 6}]
@@ -229,7 +231,7 @@ class struct2df():
     @staticmethod
     def _listofdicts_clean_scalar_arrays(listofdicts):
         """
-        Private function used in the class `struct2df` to clean the the converted list of dictioaries from `_dict2list_of_dicts`.
+        Private function used in the class `Struct2PyData` to clean the the converted list of dictioaries from `_dict2list_of_dicts`.
         The mat73 module places numeric values into numpy arrays of shape ().
         This function iterates through values in the list of dictioaries and converts the () arrays into numeric values.
         If the value is a whole number this function also converts it to an integer.
@@ -350,12 +352,12 @@ class struct2df():
 
     
 
-    def plot_tracks(self, bysex=False, burnin=0, plottitle='', saveplot=True, filename='', showplot=False):
+    def plot_tracks(self, bysex=False, burnin=0, plottitle='', saveplot=False, filename='', showplot=True):
         """
         Method plots tracks of flies using the x,y coordinates [mm].
         The optional argument bysex is a boolean argument that indicates whether to color the tracks by the sex of the fly
         burnin is the starting frame for which the plotting starts. it defaults to zero, the first frame.
-        If `struct2df` was instanciated with a `separate_chambers` dictionary, multiple plots will be generated.
+        If `Struct2PyData` was instanciated with a `separate_chambers` dictionary, multiple plots will be generated.
         """
 
         if self.dtype == "trx":
@@ -488,7 +490,7 @@ class struct2df():
 
 
 
-    def plot_density(self, resolution=5, burnin=0, plottype="heatmap", chamber="all", plottitle='', showplot=False, saveplot=True, filename=''):
+    def plot_density(self, resolution=5, burnin=0, plottype="heatmap", chamber="all", plottitle='', showplot=True, saveplot=False, filename=''):
         """
         Method plots the frequency that locations on the arena were occupied by flies using the x_mm and y_mm parameters.
         A temparary dataframe is made using these parameters and transformed into a 2D histogram. This histogram plots the density either as a heatmap or 3D surface map.
@@ -621,7 +623,7 @@ class struct2df():
 
 
 
-    def plot_timeseries(self, fly='all', persecond=True, framerate=30, scorethreshold=None, burnin=0, plottitle='', saveplot=True, filename='', showplot=False):
+    def plot_timeseries(self, fly='all', persecond=True, framerate=30, scorethreshold=None, burnin=0, plottitle='', saveplot=False, filename='', showplot=True):
         """
         Plots a line graph of a perframe feature or behavior score. Can plot lines for all flies or select flies.
         If the type of data is JAABA behavior data, the method outputs a scores and processed scores plots.
@@ -808,13 +810,15 @@ class struct2df():
 
 
 
-#class for organizing a fly experiment using struct2df instances
-class experiment():
+#class for organizing a fly Experiment using Struct2PyData instances
+class Experiment():
 
-    def __init__(self, structdfls):
+    def __init__(self, structls, metadata):
         """
-        Note that this class cannot be imported without also importing struct2df.
-        This class takes in a list of instances of struct2df from the same fly experiment.
+        Note that this class cannot be imported without also importing Struct2PyData.
+        This class takes in a list of instances of Struct2PyData from the same fly Experiment.
+        It also takes metadata as a dictionary. For example, if you want to specify a group, a replicate, the 
+        number of males, and the genotype, pass the dictionary: {"Group":"15M10F", "replicate":"two", "num_males":15, "Genotype":"w1118"}
         The instantiation of the class needs the trx.mat file and any other .mat file you want to include.
         This class will load data into multiple lists and dictionaries which can be referenced and are referenced by methods.
         The ethogram method needs processed behavior score mat files.
@@ -829,9 +833,11 @@ class experiment():
         self.jaaba_scores = {}
         self.jaaba_processed = {}
         self.sex = {}
+        self.metadata = metadata
+
 
         #loading data into objects
-        for i in structdfls:
+        for i in structls:
 
             if i.dtype == 'trx':
                 self.trx_ls = i.trx_ls
@@ -954,10 +960,10 @@ class experiment():
         
 
 
-    def ethogram(self, fly, scorethreshold=0.75, burnin=0, framerate=30, behavior_order=None, plottitle="", showplot=False, saveplot=True, filename=""):
+    def ethogram(self, fly, scorethreshold=0.75, burnin=0, framerate=30, behavior_order=None, plottitle="", showplot=True, saveplot=False, filename=""):
         """
         Method to plot an ethogram of all loaded behaviors for a single fly or a layered ethogram for a set of flies. Select the fly to plot by its itenger id value.
-        The burnin can be set to the SECOND to start the plot at. Note that this is different from the struct2df method which takes the frame to start at.
+        The burnin can be set to the SECOND to start the plot at. Note that this is different from the Struct2PyData method which takes the frame to start at.
         The average behavior score threshold can also be set, but defaults to 0.75.
         """
 
@@ -1073,10 +1079,14 @@ class experiment():
 
 
 
-    def network(self, dist_threshold=float('inf'), behavior=None, behavior_threshold=0.5, burnin=0, framerate=30, chamber="all", plottitle="", showplot=False, saveplot=True, filename=""):
+    def network(self, dist_threshold=float('inf'), behavior=None, behavior_threshold=0.5, burnin=0, framerate=30, chamber="all", plottitle="", showplot=True, saveplot=False, filename=""):
             """
             can now pass the chamber name as a string to `chamber`
             """
+
+            #check for dcenter data
+            if "dcenter" not in self.perframes.keys():
+                raise AttributeError("\n\nThe `perframes` attribute does not contain the 'dcenter' parameter. Make sure you have loaded dcenter.mat with `Struct2PyData` and included the instance in the `Experiment` class input.\n")
 
             #function for sorted() function key
             def sort_key(lsitem):
@@ -1248,171 +1258,345 @@ class experiment():
 
 
 
-    def pseudo_ethogram(self, burnin=0, scorethreshold=None, fly="all", framerate=30, plottitle="", showplot=False, saveplot=True, filename=""):
+
+class BehaviorDataSummary():
+    
+    def __init__(self, expls, min_behavior_frames=5, max_frame_gap=30, bysex=True):
         """
-        Method to plot a pseudo-ethogram of all loaded behaviors for all flies, subset of flies, or single fly.
-        The burnin can be set to the SECOND to start the plot at. Note that this is different from the struct2df method which takes the frame to start at.
-        The average behavior score threshold can also be set, but defaults to zero.
-        The flies defaults to a plot of all flies but can be set to a subset of flies which is input as a list of fly ids as integers or a single fly id as an integer.
-        'm' or 'f' can also be passed to select just male or female flies.
-        You may also pass in the name of a chamber as a string if you wish to plot all flies in one chmaber and if the trx `struct2df` instance contains a separate_chambers dictionary.
+        This class aggregates Experiment classes and summarizes the behavioral counts and frequencies
+        per experiment and per ID per experiment. csv files with this data can be saved and you can plot
+        relevant behavioral plots.
         """
 
-        #selecting flies
-        flyls = []
+        #start with empty summary which may be filled later in the summarize method or when printing
+        self.summary = None
+        self.representative_experiments = None
 
-        if fly == 'all':
-            for idx in range(len(self.trx_ls)):
-                flyls.append(idx+1)
-            opacity = 0.5
+        #setting list of experiments
+        self.Experiment_list = expls
 
-        elif isinstance(fly, list):
-            flyls = fly
-            opacity = 0.5
+        #finding behavior names present in all experiments
+        experiment_behavior_sets = [set(ex.jaaba_processed.keys()) for ex in self.Experiment_list]
+        self.common_behaviors = sorted(set.intersection(*experiment_behavior_sets))
 
-        elif fly == 'm':
-            for i in self.sex.keys():
-                if self.sex[i] == 'm':
-                    flyls.append(i)
-            flyls.sort()
-            opacity = 0.5
+        #finding common metadata labels
+        metadata_sets = [set(ex.metadata.keys()) for ex in self.Experiment_list]
+        common_metadata = sorted(set.intersection(*metadata_sets))
 
-        elif fly == 'f':
-            for i in self.sex.keys():
-                if self.sex[i] == 'f':
-                    flyls.append(i)
-            flyls.sort()
-            opacity = 0.5
+        #dictionaries for dataframe construction
+        behavior_per_id_dict = {"ID":[], "Sex":[], "Experiment":[]}
+        for b in self.common_behaviors:
+            behavior_per_id_dict[f"{b}_frequency"] = []
+            behavior_per_id_dict[f"{b}_count"] = []
+        for m in common_metadata:
+            behavior_per_id_dict[m] = []
 
-        elif self.chambers != None and fly in list(self.chambers.keys()):
-            flyls = list(self.chambers[fly])
-            opacity = 0.5
+        #grabbing data from experiments
+        for idx, experiment in enumerate(self.Experiment_list):
+            label = f"Exp{idx}"
+            sexes = experiment.sex
+            ids = sorted(list(experiment.trxs.keys()))
+            meta = experiment.metadata
 
+            for id in ids:
+                behavior_per_id_dict["ID"].append(id)
+                behavior_per_id_dict["Sex"].append(sexes[id])
+                behavior_per_id_dict["Experiment"].append(label)
+                for m in common_metadata:
+                    behavior_per_id_dict[m].append(meta[m])
+
+                for behavior in self.common_behaviors:
+                    behavior_df = experiment.jaaba_processed[behavior]
+                    #compute frequency as sum(behavior frames) / total frames
+                    freq = behavior_df[id].mean()
+                    behavior_per_id_dict[f"{behavior}_frequency"].append(freq)
+                    #compute count
+                    series = behavior_df[id]
+                    behavior_frame_indices = series[series == 1].index.to_list()
+                    count = BehaviorDataSummary._count_behavior_bouts(behavior_frame_indices, min_behavior_frames, max_frame_gap)
+                    behavior_per_id_dict[f"{behavior}_count"].append(count)
+
+        #making per id dataframe
+        self.behavior_per_id = pd.DataFrame(behavior_per_id_dict)
+
+        #making aggregated dataframe(s)
+        self.behavior_per_experiment = BehaviorDataSummary._group_data_per_experiment(self.behavior_per_id)
+        if bysex:
+            self.male_behavior_per_experiment = BehaviorDataSummary._group_data_per_experiment(self.behavior_per_id, sex="m")
+            self.female_behavior_per_experiment = BehaviorDataSummary._group_data_per_experiment(self.behavior_per_id, sex="f")
+
+        #print(self.behavior_per_id.columns)
+        #print(self.behavior_per_experiment.columns)
+        #print(self.male_behavior_per_experiment.columns)
+        #print(self.female_behavior_per_experiment.columns)
+
+
+
+    ###Static Helper Methods###
+    @staticmethod
+    def _count_behavior_bouts(frame_indices, min_bout_frames, max_bout_gap):
+        """
+        Helper method that takes in a list of frame indeces where an id is performing the behavior
+        and outputs a count of how many times that id performs the behavior. Bouts with a gap of at
+        most max_bout_gap will be counted as a single bouts, and only bouts longer than min_bout_length
+        will be counted.
+
+        Arguments:
+        frame_indeces (list): list of frames where behavior processed score for an id = 1
+        min_bout_frames (int): minimum number of behavior frames to be considered a bout
+        max_bout_gap (int): maximum number of gap frames (= 0) to be tolerated in a bout
+
+        Returns (int) count of behavior bouts
+        """
+
+        #check if there are no bouts
+        if len(frame_indices) < min_bout_frames:
+            return 0
+
+        #setting counters
+        count = 0
+        length = 1
+
+        #iterating through behavior frames
+        for idx in range(1, len(frame_indices)):
+            
+            #compute difference between adjacent behavior frames
+            diff = frame_indices[idx] - frame_indices[idx-1]
+
+            #check if gap is within tolerance
+            if diff <= max_bout_gap:
+                length += 1
+            else:
+                #check if bout is within min bout tolerance
+                if length >= min_bout_frames:
+                    #add to bout count
+                    count += 1
+                #reset for next bout
+                length = 1
+        
+        #handle last bout
+        if length >= min_bout_frames:
+            count += 1
+
+        return count
+    
+
+    @staticmethod
+    def _group_data_per_experiment(per_id_df, sex=None):
+        """
+        Helper method takes in the self.behavior_per_id dataframe and groups the data
+        by experiment to compute the mean, median, and variance of the behavior frequencies
+        and counts. You can also specify the sex on which to compute these summary statistics.
+        Use 'm' to compute only for males and 'f' to compute only for females
+        
+        Arguments:
+        per_id_df (DataFrame): the self.behavior_per_id df
+        sex (default is None, input is str = 'm' or 'f'): specifies whether to filter data by sex before computing summary statistics
+        """
+
+        #filtering sex if necessary
+        if sex in ["m", "f"]:
+            df = per_id_df[per_id_df["Sex"] == sex]
         else:
-            flyls.append(fly)
-            opacity = 1
+            df = per_id_df
+
+        #grabbing columns
+        data_cols = [col for col in df.columns if col.endswith("_frequency") or col.endswith("_count")]
+        meta_cols = [col for col in df.columns if col not in ["ID", "Sex", "Experiment"] + data_cols]
+
+        #set aggregation functions
+        mean_med_var = {**{col: ['mean', 'median', 'var'] for col in data_cols}}
+
+        #aggregating data
+        agg_data_df = df.groupby("Experiment").agg(mean_med_var)
+        agg_data_df.columns = [f"{col}_{stat}" for col, stat in agg_data_df.columns]
+        agg_data_df = agg_data_df.reset_index()
+
+        #renaming data columns if necessary
+        if sex == "m":
+            agg_data_df = agg_data_df.rename(columns={col: f"male_{col}" for col in agg_data_df.columns if col != "Experiment"})
+        elif sex == "f":
+            agg_data_df = agg_data_df.rename(columns={col: f"female_{col}" for col in agg_data_df.columns if col != "Experiment"})
 
 
-        #getting behaviors
-        behaviors = list(self.jaaba_processed.keys())
+        #merging metadata
+        metadata_df = df.groupby("Experiment")[meta_cols].first().reset_index()
+        summary_df = pd.merge(agg_data_df, metadata_df, on="Experiment")
 
-        #ethogram can only plot with more than one behavior, thus this if, else condition
-        if len(behaviors) > 1:
-
-
-            #plotting
-            fig, ax = plt.subplots(len(behaviors), 1, sharex='col', figsize=(20,7))
-
-            for i in range(len(behaviors)):
-
-                #averaging dataframe per second
-                framesdf = self.jaaba_processed[behaviors[i]]
-                persec = framesdf.groupby(np.arange(len(framesdf))//framerate).mean()
-
-                for id in flyls:
-
-                    ax[i].plot(persec[id].to_list(), label=id, alpha=opacity)
-                    ax[i].fill_between([i for i in range(len(persec[id].to_list()))], persec[id].to_list(), alpha=opacity)
-                    ax[i].set_ylabel(behaviors[i])
-
-                    if scorethreshold != None:
-                        ax[i].set_ylim(bottom=scorethreshold, top=1)
-                    else:
-                        ax[i].set_ylim(top=1)
-
-            plt.xlim(left=burnin, right=len(persec[id].to_list()))
-            plt.xlabel("seconds")
-            plt.suptitle(plottitle)
-
-            #formating and showing the plot
-            if len(flyls) != 1:
-                handles, labels = plt.gca().get_legend_handles_labels()
-                by_label = dict(zip(labels, handles))
-                leg = plt.legend(by_label.values(), by_label.keys(), loc='lower center', bbox_to_anchor=(0.5, -0.32), ncol=len(flyls))
-                for obj in leg.get_lines():
-                    obj.set_linewidth(5)
-
-            if showplot:
-                plt.show()
-
-            if saveplot:
-                plt.savefig('{name}_pseudo_ethogram_{flies}.png'.format(name=filename, flies=str(fly)))
+        return summary_df
 
 
-        else:
-            print("\nWARNING: Only one behavior is present in this instance of `fly_experiment`. `pseudo_ethogram` method cannot plot with only one behavior.\nPlease use the `plot_timeseries` method on the `struct2df` instance instead.\n")
-
-
-
-
-
-    def single_ethogram(self, fly, scorethreshold=0.75, burnin=0, framerate=30, plottitle="", showplot=False, saveplot=True, filename=""):
+    #methods
+    def summarize(self):
         """
-        Method to plot an ethogram of all loaded behaviors for a single fly. Select the fly to plot by its itenger id value.
-        The burnin can be set to the SECOND to start the plot at. Note that this is different from the struct2df method which takes the frame to start at.
-        The average behavior score threshold can also be set, but defaults to 0.75.
+        Method summarizes the behavior data by finding the min, mean, median, and max frequency and 
+        count for each behavior. Notes that this is the mim, mean, median, and max of the mean frequency/count per video.
+        It also identifies experiments that are most representative of the min, mean, median, and max behavior frequencies
         """
 
-        #setting up plot
-        plt.figure(figsize=(20,5))
+        #summary dictionary for dataframe construction
+        sum_dict = {"":[], "Min":[], "Mean":[], "Median":[], "Max":[]}
+        for behavior in self.common_behaviors:
+            sum_dict[""].append(f"{behavior} frequency")
+            sum_dict[""].append(f"{behavior} count")
+        sum_dict[""].append("representative experiment")
 
-        #getting behaviors
-        behaviors = list(self.jaaba_processed.keys())
+        #filling summary data
+        for behavior in self.common_behaviors:
+            #grabbing min data
+            sum_dict["Min"].append(self.behavior_per_experiment[f"{behavior}_frequency_mean"].min())
+            sum_dict["Min"].append(self.behavior_per_experiment[f"{behavior}_count_mean"].min())
+            #grabbing mean data
+            sum_dict["Mean"].append(self.behavior_per_experiment[f"{behavior}_frequency_mean"].mean())
+            sum_dict["Mean"].append(self.behavior_per_experiment[f"{behavior}_count_mean"].mean())
+            #grabbing median data
+            sum_dict["Median"].append(self.behavior_per_experiment[f"{behavior}_frequency_mean"].median())
+            sum_dict["Median"].append(self.behavior_per_experiment[f"{behavior}_count_mean"].median())
+            #grabbing max data
+            sum_dict["Max"].append(self.behavior_per_experiment[f"{behavior}_frequency_mean"].max())
+            sum_dict["Max"].append(self.behavior_per_experiment[f"{behavior}_count_mean"].max())
 
-        #creating color map
-        colors = plt.cm.hsv(np.linspace(0, 0.8, len(behaviors)))
+        #find min, mean, med, and max representative experiments
+        freq_cols = [col for col in self.behavior_per_experiment.columns if col.endswith("_frequency_mean")]
+        ordering_cols = ["Experiment"] + freq_cols
+        ordering_df = self.behavior_per_experiment[ordering_cols].copy()
+        med_index = len(ordering_df) // 2
 
-        #looping through behaviors
-        for behavior_idx, behavior in enumerate(behaviors):
+        mins = []
+        means = []
+        meds = []
+        maxs = []
 
-            #averaging dataframe per second
-            framesdf = self.jaaba_processed[behavior]
-            persec = framesdf.groupby(np.arange(len(framesdf))//framerate).mean()
+        #computing summary means for tiebreaking
+        ordering_df["summary_means"] = ordering_df[freq_cols].mean(axis=1)
 
-            #extracting behavior data for selected fly
-            fly_behavior_data = persec[fly].to_list()
+        for behavior in self.common_behaviors:
+            ordering_df.sort_values(by=f"{behavior}_frequency_mean", inplace=True)
 
-            #finding behavior ranges
-            starts = []
-            stops = []
-            behaving = False
+            #get min experiments
+            min_val = ordering_df.at[0, "summary_means"]
+            min_exp = ordering_df.at[0, "Experiment"]
+            #get mean experiments
+            mean_target = ordering_df[f"{behavior}_frequency_mean"].mean()
+            mean_idx = (ordering_df[f"{behavior}_frequency_mean"] - mean_target).abs().idxmin()
+            mean_val = ordering_df.at[mean_idx, "summary_means"]
+            mean_exp = ordering_df.at[mean_idx, "Experiment"]
+            #get median experiments
+            med_val = ordering_df.at[med_index, "summary_means"]
+            med_exp = ordering_df.at[med_index, "Experiment"]
+            #get max experiments
+            max_val = ordering_df.at[len(ordering_df)-1, "summary_means"]
+            max_exp = ordering_df.at[len(ordering_df)-1, "Experiment"]
+            #append tuples to lists
+            mins.append((min_val, min_exp))
+            means.append((mean_val, mean_exp))
+            meds.append((med_val, med_exp))
+            maxs.append((max_val, max_exp))
 
-            for second_idx, score in enumerate(fly_behavior_data):
+        #breaking ties and appending to dict
+        mins.sort()
+        means.sort()
+        meds.sort()
+        maxs.sort()
 
-                if behaving:
-                    if score >= scorethreshold:
-                        continue
-                    else:
-                        stops.append(second_idx+1)
-                        behaving = False
-                else:
-                    if score >= scorethreshold:
-                        starts.append(second_idx+1)
-                        behaving = True
-                    else:
-                        continue
+        mean_med_index = len(means) // 2
 
-            #if starts and stops are not the same length, that means the final range reaches the end
-            if len(starts) != len(stops):
-                stops.append(len(fly_behavior_data))
+        sum_dict["Min"].append(mins[0][1])
+        sum_dict["Mean"].append(means[mean_med_index][1])
+        sum_dict["Median"].append(meds[mean_med_index][1])
+        sum_dict["Max"].append(maxs[-1][1])
 
-            #plotting behavior ranges
-            behavior_labels = [behavior] * len(starts)
-            plt.hlines(y=behavior_labels, xmin=starts, xmax=stops, linewidth=15, color=colors[behavior_idx])
+        #making df
+        self.summary = pd.DataFrame(sum_dict)
+        self.summary = self.summary.set_index(self.summary.columns[0])
 
-        #formating plot
-        plt.xlim(left=burnin)
-        plt.xlabel("seconds")
-        plt.title(plottitle)
-
-        if showplot:
-            plt.show()
-
-        if saveplot:
-            plt.savefig('{name}_ethogram_{flies}.png'.format(name=filename, flies=str(fly)))
-
-
-
+        #making representative experiments dictionary
+        self.representative_experiments = {"min": mins[0][1], "mean": means[mean_med_index][1], "median": meds[mean_med_index][1], "max": maxs[-1][1]}
 
 
     
+    def save(self, filename_prefix=""):
+        """
+        Method to save the behavior_per_id and behavior_per_experiment dataframes to csv in teh current directory.
+
+        Arguments:
+        filename_prefix (str = ""): Prefix for output filenames
+        """
+
+        #cleaning prefix
+        if filename_prefix != "" and not filename_prefix.endswith("_"):
+            filename_prefix += "_"
+
+        #saving csvs
+        self.behavior_per_experiment.to_csv(f"{filename_prefix}behavior_per_experiment.csv", index=False)
+        self.behavior_per_id.to_csv(f"{filename_prefix}behavior_per_id.csv", index=False)
+
+        if hasattr(self, "male_behavior_per_experiment") and hasattr(self, "female_behavior_per_experiment"):
+            self.male_behavior_per_experiment.to_csv(f"{filename_prefix}male_behavior_per_experiment.csv", index=False)
+            self.female_behavior_per_experiment.to_csv(f"{filename_prefix}female_behavior_per_experiment.csv", index=False)
+
+
+
+
+    def plot_representative(self, experiment="mean"):
+        """
+        Method to plot a general ethogram and behavior networks for a representative experiment. By default the method
+        plots the experiment representative of the mean behavior frequency. To plot representatives of min, median, or
+        max, use the arguments "min", "median", or "max". If you want to plot a specific experiment, input either the
+        experiment name or index. E.g. "Exp3" or 3
+
+        Argument:
+        experiment (str or int): One of 'min', 'mean', 'median', 'max', an experiment name (e.g. 'Exp3'), or an integer index.
+        """
+
+        #grabbing experiment
+        if isinstance(experiment, str) and experiment in self.representative_experiments.keys():
+            #check for summary
+            if self.summary is None:
+                self.summarize()
+            experiment = self.representative_experiments[experiment]
+
+        if isinstance(experiment, str) and experiment.startswith("Exp"):
+            experiment_idx = int(experiment.replace("Exp", ""))
+        elif isinstance(experiment, int):
+            experiment_idx = experiment
+        else:
+            raise ValueError("Invalid 'experiment' argument. Use one of: 'min', 'mean', 'median', 'max', 'ExpN', or an integer index.")
+        
+        if experiment_idx >= len(self.Experiment_list):
+            raise IndexError(f"Experiment index {experiment_idx} is out of range (n = {len(self.Experiment_list)}).")
+
+        exp_obj = self.Experiment_list[experiment_idx]
+        
+        #plotting ethogram
+        exp_obj.ethogram("all", showplot=True, saveplot=False)
+
+        #plotting networks
+        exp_obj.network(dist_threshold=2.5, plottitle="Proximity ≤ 2.5mm", showplot=True, saveplot=False)
+        for behavior in self.common_behaviors:
+            exp_obj.network(behavior=behavior, plottitle=behavior, showplot=True, saveplot=False)
+
+
+
+
+
+    def __str__(self):
+        """Override method for printing out the summary"""
+
+        #get summary
+        if self.summary is None:
+            self.summarize()
+
+        #setting pretty table
+        tab = PrettyTable()
+        tab.field_names = [""] + self.summary.columns.to_list()
+        for index, row in self.summary.iterrows():
+            tab.add_row([index] + row.to_list())
+
+        return str(tab)
+    
+    def __repr__(self):
+        """Override method for displaying object in Jupyter Notebooks and the like"""
+        return self.__str__()
+
+
